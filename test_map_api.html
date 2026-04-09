@@ -1,0 +1,58 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试地图 API</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .result { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffe0e0; color: #c00; }
+        .success { background: #e0ffe0; color: #060; }
+    </style>
+</head>
+<body>
+    <h1>测试地图 API 连接</h1>
+    <div id="results"></div>
+    
+    <script>
+        const results = document.getElementById('results');
+        
+        async function test() {
+            try {
+                results.innerHTML += '<div class="result">测试 1: 检查 API base...</div>';
+                const apiBase = window.location.origin + '/api';
+                results.innerHTML += `<div class="result success">API Base: ${apiBase}</div>`;
+                
+                results.innerHTML += '<div class="result">测试 2: 获取行程列表...</div>';
+                const response = await fetch(`${apiBase}/plans`);
+                results.innerHTML += `<div class="result">响应状态：${response.status} ${response.statusText}</div>`;
+                
+                if (response.ok) {
+                    const plans = await response.json();
+                    results.innerHTML += `<div class="result success">获取到 ${plans.length} 个行程</div>`;
+                    
+                    if (plans.length > 0) {
+                        const p = plans[0];
+                        results.innerHTML += `
+                            <div class="result success">
+                                <strong>第一个行程:</strong><br>
+                                ID: ${p.id}<br>
+                                出发：${p.start_city}<br>
+                                目的：${p.target_city}<br>
+                                天数：${p.days}<br>
+                                已生成：${p.plan_generated}<br>
+                                行程数据：${p.itinerary ? '有' : '无'}
+                            </div>
+                        `;
+                    }
+                }
+            } catch (e) {
+                results.innerHTML += `<div class="result error">错误：${e.message}</div>`;
+                console.error(e);
+            }
+        }
+        
+        test();
+    </script>
+</body>
+</html>

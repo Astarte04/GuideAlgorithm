@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>旅行社区 - 云途智游</title>
+    <link rel="stylesheet" href="css/style.css?v=20260319">
+</head>
+<body>
+    <div class="popup-mask community-publish-mask" id="communityPublishMask"></div>
+    <main class="container community-page">
+        <h2 class="page-title">社区动态</h2>
+        <section class="community-guideline" aria-label="社区规范提示">
+            请各位旅友文明发言，理性交流。请尊重他人，不辱骂、不造谣、不引战，拒绝广告与低俗内容。发言请勿涉及政治敏感话题。共同维护友善清朗的社区环境，让交流更有温度。
+        </section>
+        <div class="community-feed" id="communityFeed"></div>
+        <div class="community-empty" id="communityEmpty" style="display:none;">还没有动态，快发布第一条行程分享吧</div>
+    </main>
+
+    <button class="add-btn community-add-btn" id="communityPublishBtn" type="button" aria-label="发布动态">+</button>
+
+    <div class="form-popup community-publish-popup" id="communityPublishPopup" role="dialog" aria-modal="true">
+        <button class="popup-close" id="communityPublishClose" aria-label="关闭发布面板">×</button>
+        <h2 class="page-title">发布行程分享</h2>
+        <div class="form-item">
+            <label class="form-label">选择行程卡</label>
+            <select class="autocomplete-input" id="publishTripSelect">
+                <option value="">请选择</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label class="form-label">选择已完成节点事件</label>
+            <div class="community-node-list" id="publishNodeList"></div>
+        </div>
+        <div class="form-item">
+            <label class="form-label">分享内容</label>
+            <textarea class="form-input" id="publishContentInput" rows="4" placeholder="写下这次旅行的感受"></textarea>
+        </div>
+        <div class="form-item">
+            <label class="form-label">上传图片</label>
+            <label class="community-upload-btn" for="publishImageInput">选择图片</label>
+            <input type="file" id="publishImageInput" accept="image/*" multiple style="display:none;">
+            <div class="community-upload-hint">最多9张</div>
+            <div class="community-image-preview" id="publishImagePreview"></div>
+        </div>
+        <button class="btn-submit" id="publishSubmitBtn" type="button">发布</button>
+    </div>
+
+    <script src="js/components/Navbar.js?v=20260319"></script>
+    <script src="js/common.js?v=20260319"></script>
+    <script>
+        const DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 24 24%22 fill=%22%23007aff%22%3E%3Cpath d=%22M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5z%22/%3E%3C/svg%3E';
+        const MAX_POST_IMAGE_UPLOAD_BYTES = 8 * 1024 * 1024;
+        const MAX_POST_IMAGE_STORE_BYTES = 4 * 1024 * 1024;
+        let publishImages = [];
+        let cachedPosts = [];
+
+        function estimateDataUrlBytes(dataUrl) {
+            if (!dataUrl || typeof dataUrl !== 'string') return 0;
+            const commaIndex = dataUrl.indexOf(',');
+            if (commaIndex < 0) return 0;
+            const base64 = dataUrl.slice(commaIndex + 1);
+            const padding = (base64.match(/=+$/) || [''])[0].length;
+            return Math.floor(base64.length * 0.75) - padding;
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result || '');
+                reader.onerror = () => reject(new Error('图片读取失败'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function loadImageElement(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('图片解析失败'));
+                img.src = dataUrl;
+            });
+        }
+
+        async function normalizePostImageDataUrl(file) {
+            if (!file.type || !file.type.startsWith('image/')) {
+                throw new Error('仅支持上传图片文件');
+            }
+            if (file.size > MAX_POST_IMAGE_UPLOAD_BYTES) {
+                throw new Error('单张原图不能超过8MB');
+            }
+            const sourceDataUrl = await readFileAsDataURL(file);
+            const image = await loadImageElement(sourceDataUrl);
+            const maxSide = 1280;
+            const width = image.width || 1;
+            const height = image.height || 1;
+            const scale = Math.min(1, maxSide / Math.max(width, height));
+            const targetWidth = Math.max(1, Math.round(width * scale));
+            const targetHeight = Math.max(1, Math.round(height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+            const mimeCandidates = ['image/webp', 'image/jpeg', 'image/png'];
+            let result = '';
+            for (const mime of mimeCandidates) {
+                const qualityList = mime === 'image/png' ? [undefined] : [0.88, 0.8, 0.72];
+                for (const quality of qualityList) {
+                    result = quality === undefined ? canvas.toDataURL(mime) : canvas.toDataURL(mime, quality);
+                    if (estimateDataUrlBytes(result) <= MAX_POST_IMAGE_STORE_BYTES) {
+                        return result;
+                    }
+                }
+            }
+            if (estimateDataUrlBytes(result) > MAX_POST_IMAGE_STORE_BYTES) {
+                throw new Error('图片处理后仍超过4MB，请换一张更小的图片');
+            }
+            return result;
+        }
+
+        function getCurrentUser() {
+            const raw = localStorage.getItem('appUser');
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function getTravelRecords() {
+            const raw = localStorage.getItem('travelRecords');
+            if (!raw) return [];
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatTimeText(timeStr) {
+            if (!timeStr) return '';
+            return String(timeStr).slice(0, 5);
+        }
+
+        function getActivityTypeText(type) {
+            const map = {
+                attraction: '景点',
+                breakfast: '早餐',
+                lunch: '午餐',
+                dinner: '晚餐',
+                accommodation: '住宿',
+                airplane: '航班'
+            };
+            return map[type] || '事件';
+        }
+
+        function getCompletedNodesByRecord(record) {
+            if (!record || !record.itinerary || !Array.isArray(record.itinerary.itinerary)) return [];
+            const completionKey = `tripCompletion_${record.id}`;
+            let completionStatus = {};
+            try {
+                completionStatus = JSON.parse(localStorage.getItem(completionKey) || '{}');
+            } catch (e) {
+                completionStatus = {};
+            }
+
+            const result = [];
+            record.itinerary.itinerary.forEach((dayData) => {
+                const dayNumber = Number(dayData.day || 0);
+                const activities = Array.isArray(dayData.activities) ? dayData.activities : [];
+                activities.forEach((activity, actIndex) => {
+                    const uniqueId = activity.activity_id || `day${dayNumber}_act${actIndex}`;
+                    const done = completionStatus[uniqueId] === true;
+                    if (!done) return;
+                    const timeText = `${formatTimeText(activity.start_time)}-${formatTimeText(activity.end_time)}`.replace(/^-|-$/g, '');
+                    const placeText = activity.position || activity.end || activity.start || '';
+                    const label = `第${dayNumber}天 ${timeText} ${getActivityTypeText(activity.type)} ${placeText}`.trim();
+                    result.push(label);
+                });
+            });
+            return result;
+        }
+
+        function openPublishPopup() {
+            const user = getCurrentUser();
+            if (!user) {
+                showAlertDialog('请先登录后再发布');
+                return;
+            }
+            const records = getTravelRecords().filter(item => item && item.planGenerated && item.itinerary);
+            const select = document.getElementById('publishTripSelect');
+            select.innerHTML = '<option value="">请选择</option>';
+            records.forEach((record) => {
+                const option = document.createElement('option');
+                option.value = String(record.id);
+                option.textContent = `${record.start} - ${record.end}（${record.days}天）`;
+                select.appendChild(option);
+            });
+            document.getElementById('publishNodeList').innerHTML = '<div class="community-node-empty">请先选择行程卡</div>';
+            document.getElementById('publishContentInput').value = '';
+            publishImages = [];
+            renderPublishImagePreview();
+            document.getElementById('communityPublishMask').style.display = 'block';
+            document.getElementById('communityPublishPopup').style.display = 'block';
+        }
+
+        function closePublishPopup() {
+            document.getElementById('communityPublishMask').style.display = 'none';
+            document.getElementById('communityPublishPopup').style.display = 'none';
+        }
+
+        function bindTripSelect() {
+            const select = document.getElementById('publishTripSelect');
+            select.addEventListener('change', () => {
+                const selectedId = Number(select.value);
+                const records = getTravelRecords();
+                const target = records.find(item => item.id === selectedId);
+                const list = document.getElementById('publishNodeList');
+                list.innerHTML = '';
+                if (!target) {
+                    list.innerHTML = '<div class="community-node-empty">请先选择行程卡</div>';
+                    return;
+                }
+                const nodes = getCompletedNodesByRecord(target);
+                if (!nodes.length) {
+                    list.innerHTML = '<div class="community-node-empty">该行程暂无已完成节点</div>';
+                    return;
+                }
+                nodes.forEach((label, idx) => {
+                    const item = document.createElement('label');
+                    item.className = 'community-node-item';
+                    item.innerHTML = `<input type="checkbox" value="${escapeHtml(label)}" ${idx < 3 ? 'checked' : ''}><span>${escapeHtml(label)}</span>`;
+                    list.appendChild(item);
+                });
+            });
+        }
+
+        function renderPublishImagePreview() {
+            const preview = document.getElementById('publishImagePreview');
+            preview.innerHTML = publishImages.map((url, idx) => `
+                <div class="community-preview-item">
+                    <img src="${url}" alt="预览图${idx + 1}">
+                    <button type="button" data-remove-image="${idx}" class="community-preview-remove">×</button>
+                </div>
+            `).join('');
+        }
+
+        function bindImageUploader() {
+            const input = document.getElementById('publishImageInput');
+            const preview = document.getElementById('publishImagePreview');
+            input.addEventListener('change', async () => {
+                const files = Array.from(input.files || []);
+                if (!files.length) return;
+                const remain = Math.max(0, 9 - publishImages.length);
+                const chosen = files.slice(0, remain);
+                const converted = [];
+                for (const file of chosen) {
+                    try {
+                        const normalized = await normalizePostImageDataUrl(file);
+                        if (normalized) {
+                            converted.push(normalized);
+                        }
+                    } catch (error) {
+                        await showAlertDialog(error.message || '图片处理失败');
+                    }
+                }
+                publishImages = publishImages.concat(converted);
+                renderPublishImagePreview();
+                input.value = '';
+                if (files.length > remain) {
+                    await showAlertDialog('最多上传9张图片');
+                }
+            });
+
+            preview.addEventListener('click', (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) return;
+                const removeIndex = target.getAttribute('data-remove-image');
+                if (removeIndex === null) return;
+                const idx = Number(removeIndex);
+                publishImages.splice(idx, 1);
+                renderPublishImagePreview();
+            });
+        }
+
+        function getSelectedCompletedNodes() {
+            const checkboxes = document.querySelectorAll('#publishNodeList input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(item => item.value).filter(Boolean);
+        }
+
+        async function submitPublish() {
+            const user = getCurrentUser();
+            if (!user) {
+                await showAlertDialog('请先登录后再发布');
+                return;
+            }
+            const tripId = Number(document.getElementById('publishTripSelect').value);
+            if (!tripId) {
+                await showAlertDialog('请先选择行程卡');
+                return;
+            }
+            const records = getTravelRecords();
+            const target = records.find(item => item.id === tripId);
+            if (!target) {
+                await showAlertDialog('未找到选中的行程');
+                return;
+            }
+            const completedNodes = getSelectedCompletedNodes();
+            if (!completedNodes.length) {
+                await showAlertDialog('请至少选择一个已完成节点');
+                return;
+            }
+            const content = document.getElementById('publishContentInput').value.trim();
+
+            const response = await fetch(`${API_BASE_URL}/community/posts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_code: user.user_code,
+                    trip_id: target.id,
+                    trip_title: `${target.start} - ${target.end}`,
+                    completed_nodes: completedNodes,
+                    content,
+                    images: publishImages
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                await showAlertDialog(data.detail || '发布失败');
+                return;
+            }
+            closePublishPopup();
+            await loadCommunityPosts();
+            await showAlertDialog('发布成功');
+        }
+
+        function formatDateText(value) {
+            if (!value) return '';
+            const date = new Date(value.replace(' ', 'T'));
+            if (Number.isNaN(date.getTime())) return value;
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            return `${month}-${day} ${hour}:${minute}`;
+        }
+
+        function renderPostCard(post) {
+            const user = post.user || {};
+            const completedText = (post.completed_nodes || []).slice(0, 4).join(' · ');
+            const imagesHtml = (post.images || []).map((url, idx) => `
+                <img src="${url}" alt="动态图片${idx + 1}" class="community-post-image">
+            `).join('');
+            const commentsHtml = (post.comments || []).map((comment) => `
+                <div class="community-comment-item">
+                    <img class="community-comment-avatar" src="${comment.user.avatar_url || DEFAULT_AVATAR}" alt="头像">
+                    <div class="community-comment-content">
+                        <span class="community-comment-name">${escapeHtml(comment.user.nickname || comment.user.username || '')}</span>
+                        <span class="community-comment-text">${escapeHtml(comment.content || '')}</span>
+                    </div>
+                </div>
+            `).join('');
+            return `
+                <article class="community-post-card" data-post-id="${post.id}">
+                    <div class="community-post-head">
+                        <img class="community-post-avatar" src="${user.avatar_url || DEFAULT_AVATAR}" alt="头像">
+                        <div class="community-post-user">
+                            <div class="community-post-name">${escapeHtml(user.nickname || user.username || '')}</div>
+                            <div class="community-post-id">ID: ${escapeHtml(user.user_code || '')}</div>
+                        </div>
+                    </div>
+                    <div class="community-post-meta">
+                        <span>${escapeHtml(post.trip_title || '')}</span>
+                        <span>${escapeHtml(completedText)}</span>
+                    </div>
+                    ${post.content ? `<div class="community-post-content">${escapeHtml(post.content)}</div>` : ''}
+                    ${imagesHtml ? `<div class="community-post-images">${imagesHtml}</div>` : ''}
+                    <div class="community-post-footer">
+                        <div class="community-like-wrap">
+                            <label class="heart-container" title="点赞">
+                                <input type="checkbox" class="checkbox" data-action="like" ${post.liked_by_current_user ? 'checked' : ''}>
+                                <div class="svg-container">
+                                    <svg viewBox="0 0 24 24" class="svg-outline" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+                                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"></path>
+                                    </svg>
+                                    <svg viewBox="0 0 24 24" class="svg-filled" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+                                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"></path>
+                                    </svg>
+                                    <svg class="svg-celebrate" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                                        <polygon points="12,1 14.5,8 22,9 16.5,13.5 18,21 12,17 6,21 7.5,13.5 2,9 9.5,8"></polygon>
+                                    </svg>
+                                </div>
+                            </label>
+                            <span class="community-like-count">${post.like_count || 0}</span>
+                        </div>
+                        <span class="community-post-time">${formatDateText(post.created_at)}</span>
+                    </div>
+                    <div class="community-comment-list">${commentsHtml}</div>
+                    <div class="community-comment-form">
+                        <input class="community-comment-input" data-comment-input="true" placeholder="写评论..." maxlength="80">
+                        <button class="community-comment-send" data-action="comment" type="button">发送</button>
+                    </div>
+                </article>
+            `;
+        }
+
+        function renderCommunityPosts(posts) {
+            const feed = document.getElementById('communityFeed');
+            const empty = document.getElementById('communityEmpty');
+            if (!posts.length) {
+                feed.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+            feed.innerHTML = posts.map(item => renderPostCard(item)).join('');
+        }
+
+        async function loadCommunityPosts() {
+            const currentUser = getCurrentUser();
+            const query = currentUser ? `?user_code=${encodeURIComponent(currentUser.user_code)}` : '';
+            const response = await fetch(`${API_BASE_URL}/community/posts${query}`);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '社区动态加载失败');
+            }
+            cachedPosts = data.posts || [];
+            renderCommunityPosts(cachedPosts);
+        }
+
+        async function toggleLike(postId) {
+            const user = getCurrentUser();
+            if (!user) {
+                await showAlertDialog('请先登录后再点赞');
+                await loadCommunityPosts();
+                return;
+            }
+            const response = await fetch(`${API_BASE_URL}/community/posts/${postId}/like`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_code: user.user_code })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                await showAlertDialog(data.detail || '点赞失败');
+                await loadCommunityPosts();
+                return;
+            }
+            await loadCommunityPosts();
+        }
+
+        async function sendComment(postId, inputElement) {
+            const user = getCurrentUser();
+            if (!user) {
+                await showAlertDialog('请先登录后再评论');
+                return;
+            }
+            const content = (inputElement.value || '').trim();
+            if (!content) {
+                await showAlertDialog('评论不能为空');
+                return;
+            }
+            const response = await fetch(`${API_BASE_URL}/community/posts/${postId}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_code: user.user_code,
+                    content
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                await showAlertDialog(data.detail || '评论失败');
+                return;
+            }
+            inputElement.value = '';
+            await loadCommunityPosts();
+        }
+
+        function bindFeedActions() {
+            const feed = document.getElementById('communityFeed');
+            feed.addEventListener('click', async (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) return;
+                const actionTarget = target.closest('[data-action]');
+                if (!(actionTarget instanceof HTMLElement)) return;
+                const action = actionTarget.getAttribute('data-action');
+                if (!action) return;
+                const card = target.closest('.community-post-card');
+                if (!card) return;
+                const postId = Number(card.getAttribute('data-post-id'));
+                if (!postId) return;
+                if (action === 'like') {
+                    await toggleLike(postId);
+                    return;
+                }
+                if (action === 'comment') {
+                    const input = card.querySelector('[data-comment-input="true"]');
+                    if (!(input instanceof HTMLInputElement)) return;
+                    await sendComment(postId, input);
+                }
+            });
+        }
+
+        function bindPublishPopup() {
+            document.getElementById('communityPublishBtn').addEventListener('click', openPublishPopup);
+            document.getElementById('communityPublishClose').addEventListener('click', closePublishPopup);
+            document.getElementById('communityPublishMask').addEventListener('click', closePublishPopup);
+            document.getElementById('communityPublishPopup').addEventListener('click', (event) => {
+                event.stopPropagation();
+            });
+            document.getElementById('publishSubmitBtn').addEventListener('click', submitPublish);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            bindPublishPopup();
+            bindTripSelect();
+            bindImageUploader();
+            bindFeedActions();
+            try {
+                await loadCommunityPosts();
+            } catch (error) {
+                await showAlertDialog(error.message || '社区动态加载失败');
+            }
+        });
+    </script>
+</body>
+</html>

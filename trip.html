@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>我的行程 - 云途</title>
+    <link rel="stylesheet" href="css/style.css?v=20260320">
+</head>
+<body>
+    <main class="container trip-page">
+        <div class="trip-header">
+            <div class="trip-header-top">
+                <div class="trip-info">
+                    <h2 class="trip-title" id="tripTitle">加载中...</h2>
+                    <p class="trip-subtitle" id="tripSubtitle">-</p>
+                </div>
+                <div class="trip-status wave-effect" id="tripStatus" style="display: none;">
+                    <div class="status-dot pulse"></div>
+                    <span>正在聚焦此行程</span>
+                </div>
+            </div>
+            <div class="trip-progress-container">
+                <div class="progress-info">
+                    <span class="progress-label">行程进度</span>
+                    <span class="progress-text" id="trip-progress-text">0/0 已完成</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="trip-progress-bar" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-container" id="timelineContainer">
+            <p style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">暂无行程数据</p>
+        </div>
+    </main>
+    
+    <button class="locate-btn" id="locateTripBtn" onclick="scrollToLatestChecked()" aria-label="定位到最新勾选的行程" title="定位到最新勾选的行程" style="display: none;">
+        <svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+    </button>
+    <button class="add-btn" id="editTripBtn" onclick="openTripEditor()" aria-label="编辑行程" title="编辑行程">
+        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75l11-11.03-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l8.06-8.06.92.92L5.92 19.58zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/></svg>
+    </button>
+    <div class="popup-mask" id="tripEditMask" onclick="closeTripEditPopup()"></div>
+    <div class="form-popup trip-edit-popup" id="tripEditPopup" role="dialog" aria-modal="true">
+        <button class="popup-close" onclick="closeTripEditPopup()" aria-label="关闭">×</button>
+        <h2 class="page-title" id="tripEditTitle">编辑行程事件</h2>
+        <div class="form-item">
+            <label class="form-label">第几天</label>
+            <input type="number" class="form-input" id="tripEditDay" min="1">
+        </div>
+        <div class="form-row">
+            <div class="form-item">
+                <label class="form-label">开始时间</label>
+                <input type="text" class="form-input" id="tripEditStartTime" placeholder="09:00">
+            </div>
+            <div class="form-item">
+                <label class="form-label">结束时间</label>
+                <input type="text" class="form-input" id="tripEditEndTime" placeholder="10:30">
+            </div>
+        </div>
+        <div class="form-item">
+            <label class="form-label">类型</label>
+            <select class="autocomplete-input" id="tripEditType">
+                <option value="attraction">景点</option>
+                <option value="breakfast">早餐</option>
+                <option value="lunch">午餐</option>
+                <option value="dinner">晚餐</option>
+                <option value="accommodation">住宿</option>
+                <option value="airplane">航班</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label class="form-label">位置/内容</label>
+            <input type="text" class="form-input" id="tripEditPosition" placeholder="地点或活动内容">
+        </div>
+        <div class="form-row">
+            <div class="form-item">
+                <label class="form-label">出发地</label>
+                <input type="text" class="form-input" id="tripEditStart" placeholder="出发地">
+            </div>
+            <div class="form-item">
+                <label class="form-label">目的地</label>
+                <input type="text" class="form-input" id="tripEditEnd" placeholder="目的地">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-item">
+                <label class="form-label">费用</label>
+                <input type="number" class="form-input" id="tripEditCost" min="0" step="0.01">
+            </div>
+            <div class="form-item">
+                <label class="form-label">单价</label>
+                <input type="number" class="form-input" id="tripEditPrice" min="0" step="0.01">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-item">
+                <label class="form-label">票数</label>
+                <input type="number" class="form-input" id="tripEditTickets" min="0" step="1">
+            </div>
+            <div class="form-item">
+                <label class="form-label">航班号</label>
+                <input type="text" class="form-input" id="tripEditFlightId" placeholder="CA1234">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-item">
+                <label class="form-label">房间数</label>
+                <input type="number" class="form-input" id="tripEditRooms" min="0" step="1">
+            </div>
+            <div class="form-item">
+                <label class="form-label">房型</label>
+                <select class="autocomplete-input" id="tripEditRoomType">
+                    <option value="">未设置</option>
+                    <option value="1">单人间</option>
+                    <option value="2">双人间</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn-submit" onclick="submitTripEdit()">保存修改</button>
+    </div>
+
+    <script src="js/components/Navbar.js?v=20260319"></script>
+    <script src="js/common.js?v=20260319"></script>
+    <script>
+        let latestCheckedTarget = null;
+        let currentTripData = null;
+        let completionStatus = {};
+        let collapsedDayStatus = {};
+        let tripEditState = {
+            mode: null,
+            activityId: null
+        };
+        let isTripEditMode = false;
+        let timelineInteractionsInitialized = false;
+
+        function getCurrentUserCode() {
+            try {
+                const raw = localStorage.getItem('appUser');
+                if (!raw) return '';
+                const user = JSON.parse(raw);
+                return user?.user_code ? String(user.user_code) : '';
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function getCompletionStorageKey() {
+            if (!currentTripData || !currentTripData.id) return '';
+            const userCode = getCurrentUserCode() || 'guest';
+            return `tripCompletion_${userCode}_${currentTripData.id}`;
+        }
+
+        function getCollapsedDayStorageKey() {
+            if (!currentTripData || !currentTripData.id) return '';
+            return `tripCollapsedDays_${currentTripData.id}`;
+        }
+
+        function getDayStorageId(dayContainer) {
+            return dayContainer.dataset.day || '';
+        }
+
+        function saveCollapsedDayStatus() {
+            const key = getCollapsedDayStorageKey();
+            if (!key) return;
+            localStorage.setItem(key, JSON.stringify(collapsedDayStatus));
+        }
+
+        function loadCollapsedDayStatus() {
+            const key = getCollapsedDayStorageKey();
+            if (!key) {
+                collapsedDayStatus = {};
+                return;
+            }
+            const saved = localStorage.getItem(key);
+            collapsedDayStatus = saved ? JSON.parse(saved) : {};
+        }
+
+        function setDayCollapsed(dayContainer, allChecked, isCollapsed) {
+            if (!dayContainer) return;
+            const content = dayContainer.querySelector('.timeline-day-content');
+            const summary = dayContainer.querySelector('.day-summary');
+            const toggleBtn = dayContainer.querySelector('.toggle-day-btn');
+            if (!content || !summary || !toggleBtn) return;
+
+            if (!allChecked) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = 'none';
+                summary.classList.add('hidden');
+                toggleBtn.classList.add('hidden');
+                toggleBtn.textContent = '收起';
+                return;
+            }
+
+            summary.classList.remove('hidden');
+            toggleBtn.classList.remove('hidden');
+            if (isCollapsed) {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0';
+                toggleBtn.textContent = '展开';
+                return;
+            }
+
+            content.classList.remove('collapsed');
+            content.style.maxHeight = 'none';
+            toggleBtn.textContent = '收起';
+        }
+
+        function syncDayCollapsedState(dayContainer) {
+            const dayId = getDayStorageId(dayContainer);
+            if (!dayId) return;
+
+            const dayCheckboxes = dayContainer.querySelectorAll('.checkbox-container input[type="checkbox"]');
+            const allChecked = dayCheckboxes.length > 0 && Array.from(dayCheckboxes).every(cb => cb.checked);
+            const storedCollapsed = collapsedDayStatus[dayId] === true;
+            const shouldCollapse = allChecked && storedCollapsed;
+
+            setDayCollapsed(dayContainer, allChecked, shouldCollapse);
+
+            if (!allChecked && collapsedDayStatus[dayId]) {
+                collapsedDayStatus[dayId] = false;
+                saveCollapsedDayStatus();
+            }
+        }
+
+        function applyStoredDayCollapsedState() {
+            document.querySelectorAll('.timeline-day').forEach(dayContainer => {
+                syncDayCollapsedState(dayContainer);
+            });
+        }
+
+        function getActivityTypeLabel(type) {
+            const typeMap = {
+                'airplane': '航班',
+                'accommodation': '住宿',
+                'attraction': '景点',
+                'breakfast': '早餐',
+                'lunch': '午餐',
+                'dinner': '晚餐'
+            };
+            return typeMap[type] || type;
+        }
+
+        function getActivityIcon(type) {
+            const iconMap = {
+                'airplane': '✈️',
+                'accommodation': '🏨',
+                'attraction': '📍',
+                'breakfast': '🌅',
+                'lunch': '🍽️',
+                'dinner': '🌙'
+            };
+            return iconMap[type] || '📌';
+        }
+
+        function generateActivityDescription(activity) {
+            const type = activity.type;
+            switch(type) {
+                case 'airplane':
+                    return `${activity.start} → ${activity.end}，航班号：${activity.FlightID || '未知'}`;
+                case 'accommodation':
+                    return `入住${activity.position}，${activity.rooms}间${activity.room_type === 2 ? '双人间' : '单人间'}`;
+                case 'attraction':
+                    return `游览${activity.position}`;
+                case 'breakfast':
+                case 'lunch':
+                case 'dinner':
+                    return `在${activity.position}用餐`;
+                default:
+                    return activity.position || '';
+            }
+        }
+
+        function renderTimeline(itinerary) {
+            const container = document.getElementById('timelineContainer');
+            if (!itinerary || !itinerary.itinerary || itinerary.itinerary.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">暂无行程数据</p>';
+                return;
+            }
+
+            let html = '';
+            const days = itinerary.itinerary;
+            
+            days.forEach((dayData, dayIndex) => {
+                const activities = dayData.activities || [];
+                html += `
+                    <div class="timeline-day" data-day="${dayData.day}">
+                        <div class="timeline-day-header">
+                            <div class="day-header-main">
+                                <div class="day-dot"></div>
+                                <h3>第${dayData.day}天</h3>
+                            </div>
+                            <div class="day-edit-actions">
+                                <button class="day-add-btn" onclick="openCreateActivity(${dayData.day})">新增事件</button>
+                                <button class="day-delete-btn" onclick="deleteTripDay(${dayData.day})">删除当天</button>
+                            </div>
+                            <div class="day-summary hidden">所有行程已完成</div>
+                            <button class="toggle-day-btn hidden">展开</button>
+                        </div>
+                        <div class="timeline-day-content">
+                `;
+                
+                activities.forEach((activity, actIndex) => {
+                    const activityId = activity.activity_id || '';
+                    const canEditActivity = activityId !== '';
+                    const uniqueId = activityId || `day${dayData.day}_act${actIndex}`;
+                    const isChecked = completionStatus[uniqueId] || false;
+                    
+                    html += `
+                        <div class="timeline-item">
+                            <div class="timeline-node">
+                                <span class="time">${activity.start_time}</span>
+                                <div class="node-dot"></div>
+                            </div>
+                            <div class="timeline-content">
+                                <div class="event-card">
+                                    <div class="event-info">
+                                        <h4 class="event-title">${getActivityIcon(activity.type)} ${getActivityTypeLabel(activity.type)}：${activity.position || activity.start || ''}</h4>
+                                        <p class="event-desc">${generateActivityDescription(activity)}</p>
+                                        ${activity.cost ? `<p class="event-cost">费用：¥${activity.cost.toFixed(2)}</p>` : ''}
+                                    </div>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" 
+                                               data-day="${dayData.day}" 
+                                               data-index="${actIndex}"
+                                               data-activity-id="${activityId}"
+                                               data-unique-id="${uniqueId}"
+                                               ${isChecked ? 'checked' : ''}>
+                                        <svg viewBox="0 0 512 512" height="1em" xmlns="http://www.w3.org/2000/svg" class="check-regular"><path d="M464 256A208 208 0 1 0 48 256a208 208 0 1 0 416 0zM0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256z"></path></svg>
+                                        <svg viewBox="0 0 512 512" height="1em" xmlns="http://www.w3.org/2000/svg" class="check-solid"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>
+                                    </label>
+                                    <div class="event-edit-actions">
+                                        <button class="event-edit-btn" onclick="openEditActivity(${dayData.day}, '${activityId}')" ${canEditActivity ? '' : 'disabled'}>编辑</button>
+                                        <button class="event-delete-btn" onclick="deleteActivity('${activityId}')" ${canEditActivity ? '' : 'disabled'}>删除</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                <button class="timeline-add-day-text" onclick="addTripDay()">+ 添加一天</button>
+            `;
+            
+            container.innerHTML = html;
+            applyEditModeToTimeline();
+            applyStoredDayCollapsedState();
+            updateProgress();
+        }
+
+        function applyEditModeToTimeline() {
+            const container = document.getElementById('timelineContainer');
+            if (!container) return;
+            container.classList.toggle('is-edit-mode', isTripEditMode);
+        }
+
+        function toggleDayCollapsed(dayContainer, btn) {
+            const content = dayContainer?.querySelector('.timeline-day-content');
+            if (!content) return;
+            const dayId = getDayStorageId(dayContainer);
+
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                content.style.maxHeight = content.scrollHeight + 'px';
+                btn.textContent = '收起';
+                if (dayId) {
+                    collapsedDayStatus[dayId] = false;
+                    saveCollapsedDayStatus();
+                }
+                setTimeout(() => {
+                    content.style.maxHeight = 'none';
+                }, 220);
+                return;
+            }
+
+            content.style.maxHeight = content.scrollHeight + 'px';
+            requestAnimationFrame(() => {
+                content.classList.add('collapsed');
+                content.style.maxHeight = '0';
+            });
+            btn.textContent = '展开';
+            if (dayId) {
+                collapsedDayStatus[dayId] = true;
+                saveCollapsedDayStatus();
+            }
+        }
+
+        function handleTimelineCheckboxChange(checkbox) {
+            const uniqueId = checkbox.dataset.uniqueId;
+            completionStatus[uniqueId] = checkbox.checked;
+            saveCompletionStatus();
+            updateProgress();
+            checkDayCompletion(checkbox);
+            syncCompletionToServer(checkbox);
+        }
+
+        function ensureTimelineInteractionsInitialized() {
+            if (timelineInteractionsInitialized) return;
+            const container = document.getElementById('timelineContainer');
+            if (!container) return;
+
+            container.addEventListener('change', (event) => {
+                const checkbox = event.target.closest('.checkbox-container input[type="checkbox"]');
+                if (!checkbox) return;
+                handleTimelineCheckboxChange(checkbox);
+            });
+
+            container.addEventListener('click', (event) => {
+                const toggleBtn = event.target.closest('.toggle-day-btn');
+                if (!toggleBtn) return;
+                const dayContainer = toggleBtn.closest('.timeline-day');
+                toggleDayCollapsed(dayContainer, toggleBtn);
+            });
+
+            timelineInteractionsInitialized = true;
+        }
+
+        function checkDayCompletion(changedCheckbox) {
+            const dayContainer = changedCheckbox.closest('.timeline-day');
+            const eventCard = changedCheckbox.closest('.event-card');
+            
+            if (changedCheckbox.checked) {
+                latestCheckedTarget = eventCard;
+                document.getElementById('locateTripBtn').style.display = 'flex';
+            }
+
+            if (!dayContainer) return;
+
+            const dayCheckboxes = dayContainer.querySelectorAll('.checkbox-container input[type="checkbox"]');
+            const allChecked = Array.from(dayCheckboxes).every(cb => cb.checked);
+            
+            const content = dayContainer.querySelector('.timeline-day-content');
+            const summary = dayContainer.querySelector('.day-summary');
+            const toggleBtn = dayContainer.querySelector('.toggle-day-btn');
+            const dayHeader = dayContainer.querySelector('.timeline-day-header');
+            const dayId = getDayStorageId(dayContainer);
+
+            if (allChecked) {
+                if (changedCheckbox.checked) {
+                    latestCheckedTarget = dayHeader;
+                }
+                content.style.maxHeight = content.scrollHeight + 'px';
+                requestAnimationFrame(() => {
+                    content.classList.add('collapsed');
+                    content.style.maxHeight = '0';
+                });
+                summary.classList.remove('hidden');
+                toggleBtn.classList.remove('hidden');
+                toggleBtn.textContent = '展开';
+                if (dayId) {
+                    collapsedDayStatus[dayId] = true;
+                    saveCollapsedDayStatus();
+                }
+            } else {
+                summary.classList.add('hidden');
+                toggleBtn.classList.add('hidden');
+                if (dayId) {
+                    collapsedDayStatus[dayId] = false;
+                    saveCollapsedDayStatus();
+                }
+                if(content.classList.contains('collapsed')) {
+                    content.classList.remove('collapsed');
+                    content.style.maxHeight = content.scrollHeight + 'px';
+                    toggleBtn.textContent = '收起';
+                    setTimeout(() => {
+                        content.style.maxHeight = 'none';
+                    }, 300);
+                }
+            }
+        }
+
+        function updateProgress() {
+            const checkboxes = document.querySelectorAll('.checkbox-container input[type="checkbox"]');
+            const totalEvents = checkboxes.length;
+            const completedEvents = document.querySelectorAll('.checkbox-container input[type="checkbox"]:checked').length;
+            
+            const progressBar = document.getElementById('trip-progress-bar');
+            const progressText = document.getElementById('trip-progress-text');
+            
+            const progressPercentage = totalEvents === 0 ? 0 : (completedEvents / totalEvents) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+            progressText.textContent = `${completedEvents}/${totalEvents} 已完成`;
+            syncTripCompletedStatus(totalEvents, completedEvents);
+        }
+
+        function saveCompletionStatus() {
+            const key = getCompletionStorageKey();
+            if (key) {
+                localStorage.setItem(key, JSON.stringify(completionStatus));
+            }
+        }
+
+        function loadCompletionStatus() {
+            const key = getCompletionStorageKey();
+            if (key) {
+                const saved = localStorage.getItem(key);
+                completionStatus = saved ? JSON.parse(saved) : {};
+            }
+        }
+
+        function getActiveDbPlanId() {
+            if (!currentTripData || !Number.isFinite(currentTripData.dbPlanId)) return null;
+            return currentTripData.dbPlanId;
+        }
+
+        function syncTripCompletedStatus(totalEvents, completedEvents) {
+            if (!currentTripData) return;
+            const isCompleted = totalEvents > 0 && completedEvents === totalEvents;
+            currentTripData.tripCompleted = isCompleted;
+
+            const recordsStr = localStorage.getItem('travelRecords');
+            if (!recordsStr) return;
+            const records = JSON.parse(recordsStr);
+            const nextRecords = records.map(record => {
+                if (record.id === currentTripData.id) {
+                    return {
+                        ...record,
+                        tripCompleted: isCompleted
+                    };
+                }
+                return record;
+            });
+            localStorage.setItem('travelRecords', JSON.stringify(nextRecords));
+        }
+
+        function rebuildCompletionStatusWithItinerary(itinerary) {
+            const rebuilt = {};
+            const days = itinerary?.itinerary || [];
+            days.forEach(dayData => {
+                const activities = dayData.activities || [];
+                activities.forEach((activity, actIndex) => {
+                    const uniqueId = activity.activity_id || `day${dayData.day}_act${actIndex}`;
+                    if (completionStatus[uniqueId]) {
+                        rebuilt[uniqueId] = true;
+                    }
+                });
+            });
+            completionStatus = rebuilt;
+            saveCompletionStatus();
+        }
+
+        function updateTripHeader() {
+            if (!currentTripData) return;
+            document.getElementById('tripTitle').textContent = `${currentTripData.start} - ${currentTripData.end}`;
+            document.getElementById('tripSubtitle').textContent = `${currentTripData.days}天 · ${currentTripData.people}人`;
+            document.getElementById('tripStatus').style.display = currentTripData.focused ? 'flex' : 'none';
+        }
+
+        function updateTripRecordLocal(itinerary, edited = false, days = null) {
+            if (!currentTripData) return;
+            currentTripData.itinerary = itinerary;
+            if (edited) {
+                currentTripData.edited = true;
+            }
+            if (Number.isFinite(days)) {
+                currentTripData.days = days;
+            }
+            const recordsStr = localStorage.getItem('travelRecords');
+            if (!recordsStr) return;
+            const records = JSON.parse(recordsStr);
+            const nextRecords = records.map(record => {
+                if (record.id === currentTripData.id) {
+                    return {
+                        ...record,
+                        itinerary: itinerary,
+                        edited: edited ? true : record.edited === true,
+                        days: Number.isFinite(days) ? days : record.days,
+                        tripCompleted: currentTripData.tripCompleted === true
+                    };
+                }
+                return record;
+            });
+            localStorage.setItem('travelRecords', JSON.stringify(nextRecords));
+        }
+
+        async function fetchLatestItinerary() {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) return null;
+            const response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/itinerary`);
+            if (!response.ok) return null;
+            const data = await response.json();
+            return data.itinerary || null;
+        }
+
+        async function syncCompletionToServer(checkbox) {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) return;
+            const userCode = getCurrentUserCode();
+            const dayNumber = Number(checkbox.dataset.day);
+            const activityIndex = Number(checkbox.dataset.index);
+            const activityId = checkbox.dataset.activityId || null;
+            try {
+                await fetch(`${API_BASE_URL}/plan/completion`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan_id: dbPlanId,
+                        day_number: dayNumber,
+                        activity_index: activityIndex,
+                        activity_id: activityId,
+                        completed: checkbox.checked,
+                        user_code: userCode || null
+                    })
+                });
+            } catch (error) {
+                console.error('同步完成状态失败:', error);
+            }
+        }
+
+        function closeTripEditPopup() {
+            const popup = document.getElementById('tripEditPopup');
+            const mask = document.getElementById('tripEditMask');
+            popup.style.display = 'none';
+            mask.style.display = 'none';
+            tripEditState = { mode: null, activityId: null };
+        }
+
+        function openTripEditPopup() {
+            const popup = document.getElementById('tripEditPopup');
+            const mask = document.getElementById('tripEditMask');
+            popup.style.display = 'block';
+            mask.style.display = 'block';
+        }
+
+        function fillTripEditForm(dayNumber, activity = null) {
+            document.getElementById('tripEditDay').value = dayNumber || '';
+            document.getElementById('tripEditStartTime').value = activity?.start_time || '';
+            document.getElementById('tripEditEndTime').value = activity?.end_time || '';
+            document.getElementById('tripEditType').value = activity?.type || 'attraction';
+            document.getElementById('tripEditPosition').value = activity?.position || '';
+            document.getElementById('tripEditStart').value = activity?.start || '';
+            document.getElementById('tripEditEnd').value = activity?.end || '';
+            document.getElementById('tripEditCost').value = activity?.cost ?? '';
+            document.getElementById('tripEditPrice').value = activity?.price ?? '';
+            document.getElementById('tripEditTickets').value = activity?.tickets ?? '';
+            document.getElementById('tripEditFlightId').value = activity?.FlightID || '';
+            document.getElementById('tripEditRooms').value = activity?.rooms ?? '';
+            document.getElementById('tripEditRoomType').value = activity?.room_type ?? '';
+        }
+
+        function collectTripEditPayload() {
+            const payload = {
+                start_time: document.getElementById('tripEditStartTime').value.trim(),
+                end_time: document.getElementById('tripEditEndTime').value.trim(),
+                type: document.getElementById('tripEditType').value,
+                position: document.getElementById('tripEditPosition').value.trim(),
+                start: document.getElementById('tripEditStart').value.trim(),
+                end: document.getElementById('tripEditEnd').value.trim(),
+                FlightID: document.getElementById('tripEditFlightId').value.trim(),
+                transports: []
+            };
+
+            const cost = document.getElementById('tripEditCost').value.trim();
+            const price = document.getElementById('tripEditPrice').value.trim();
+            const tickets = document.getElementById('tripEditTickets').value.trim();
+            const rooms = document.getElementById('tripEditRooms').value.trim();
+            const roomType = document.getElementById('tripEditRoomType').value;
+
+            payload.cost = cost === '' ? 0 : Number(cost);
+            payload.price = price === '' ? 0 : Number(price);
+            if (tickets !== '') payload.tickets = Number(tickets);
+            if (rooms !== '') payload.rooms = Number(rooms);
+            if (roomType !== '') payload.room_type = Number(roomType);
+
+            Object.keys(payload).forEach(key => {
+                if (payload[key] === '') {
+                    delete payload[key];
+                }
+            });
+            return payload;
+        }
+
+        function findActivityById(activityId) {
+            const itinerary = currentTripData?.itinerary?.itinerary || [];
+            for (const day of itinerary) {
+                for (const activity of day.activities || []) {
+                    if (activity.activity_id === activityId) {
+                        return { day: day.day, activity };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function setTripEditButtonStatus() {
+            const editBtn = document.getElementById('editTripBtn');
+            if (!editBtn) return;
+            if (isTripEditMode) {
+                editBtn.classList.add('is-active');
+                editBtn.setAttribute('title', '退出编辑');
+            } else {
+                editBtn.classList.remove('is-active');
+                editBtn.setAttribute('title', '编辑行程');
+            }
+        }
+
+        async function openCreateActivity(dayNumber) {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法编辑');
+                return;
+            }
+            tripEditState = { mode: 'create', activityId: null };
+            document.getElementById('tripEditTitle').textContent = `新增第${dayNumber}天事件`;
+            fillTripEditForm(dayNumber, null);
+            openTripEditPopup();
+        }
+
+        async function openEditActivity(dayNumber, activityId) {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法编辑');
+                return;
+            }
+            const located = findActivityById(activityId);
+            if (!located) {
+                await showAlertDialog('未找到要编辑的事件');
+                return;
+            }
+            tripEditState = { mode: 'edit', activityId };
+            document.getElementById('tripEditTitle').textContent = `编辑第${dayNumber}天事件`;
+            fillTripEditForm(dayNumber, located.activity);
+            openTripEditPopup();
+        }
+
+        async function submitTripEdit() {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId || !tripEditState.mode) return;
+            const dayNumber = Number(document.getElementById('tripEditDay').value);
+            if (!dayNumber || dayNumber < 1) {
+                await showAlertDialog('请填写正确的天数');
+                return;
+            }
+
+            const payload = collectTripEditPayload();
+            if (!payload.start_time || !payload.end_time || !payload.type) {
+                await showAlertDialog('请至少填写开始时间、结束时间和类型');
+                return;
+            }
+
+            try {
+                let response;
+                if (tripEditState.mode === 'create') {
+                    response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/activities`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            day_number: dayNumber,
+                            activity: payload
+                        })
+                    });
+                } else {
+                    response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/activities/${tripEditState.activityId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            updates: payload
+                        })
+                    });
+                }
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '保存失败');
+                }
+
+                const data = await response.json();
+                updateTripRecordLocal(data.itinerary, true);
+                closeTripEditPopup();
+                renderTimeline(data.itinerary);
+                await showAlertDialog('保存成功');
+            } catch (error) {
+                await showAlertDialog(`保存失败：${error.message}`);
+            }
+        }
+
+        async function deleteActivity(activityId) {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法编辑');
+                return;
+            }
+            const confirmed = await showConfirmDialog('确定删除该事件吗？');
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/activities/${activityId}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '删除失败');
+                }
+                const data = await response.json();
+                updateTripRecordLocal(data.itinerary, true);
+                renderTimeline(data.itinerary);
+                await showAlertDialog('删除成功');
+            } catch (error) {
+                await showAlertDialog(`删除失败：${error.message}`);
+            }
+        }
+
+        async function addTripDay() {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法新增天数');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/days/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ count: 1 })
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '新增天数失败');
+                }
+                const data = await response.json();
+                updateTripRecordLocal(data.itinerary, true, data.days);
+                updateTripHeader();
+                renderTimeline(data.itinerary);
+                requestAnimationFrame(() => {
+                    const dayItems = document.querySelectorAll('.timeline-day');
+                    const newestDay = dayItems[dayItems.length - 1];
+                    if (newestDay) {
+                        newestDay.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                });
+            } catch (error) {
+                await showAlertDialog(`新增天数失败：${error.message}`);
+            }
+        }
+
+        async function deleteTripDay(dayNumber) {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法删除天数');
+                return;
+            }
+            const safeDayNumber = Number(dayNumber);
+            if (!Number.isFinite(safeDayNumber) || safeDayNumber < 1) {
+                await showAlertDialog('删除失败：无效的天数');
+                return;
+            }
+
+            const itineraryDays = currentTripData?.itinerary?.itinerary || [];
+            const targetDay = itineraryDays.find(item => Number(item.day) === safeDayNumber);
+            const activityCount = targetDay?.activities?.length || 0;
+
+            if (activityCount > 0) {
+                const confirmed = await showConfirmDialog(`第${safeDayNumber}天包含${activityCount}个事件，确认整天删除吗？`);
+                if (!confirmed) return;
+            }
+
+            try {
+                let response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/days/${safeDayNumber}`, {
+                    method: 'DELETE'
+                });
+                if (response.status === 404) {
+                    response = await fetch(`${API_BASE_URL}/plan/${dbPlanId}/days/delete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ day_number: safeDayNumber })
+                    });
+                }
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || '删除失败');
+                }
+                const data = await response.json();
+                rebuildCompletionStatusWithItinerary(data.itinerary);
+                updateTripRecordLocal(data.itinerary, true, data.days);
+                updateTripHeader();
+                renderTimeline(data.itinerary);
+                await showAlertDialog(`已删除第${safeDayNumber}天`);
+            } catch (error) {
+                await showAlertDialog(`删除失败：${error.message}`);
+            }
+        }
+
+        async function openTripEditor() {
+            const dbPlanId = getActiveDbPlanId();
+            if (!dbPlanId) {
+                await showAlertDialog('当前行程缺少后端ID，无法编辑');
+                return;
+            }
+            isTripEditMode = !isTripEditMode;
+            setTripEditButtonStatus();
+            applyEditModeToTimeline();
+        }
+
+        async function loadTripData() {
+            console.log('Loading trip data...');
+            const activeTripId = localStorage.getItem('activeTripId');
+            console.log('activeTripId:', activeTripId);
+            
+            let trip = null;
+            
+            if (activeTripId) {
+                trip = window.getTripById(parseInt(activeTripId));
+                console.log('Found trip by ID:', trip);
+            }
+            
+            if (!trip) {
+                trip = window.getFocusedTrip();
+                console.log('Found focused trip:', trip);
+            }
+            
+            if (!trip) {
+                console.log('No trip found');
+                document.getElementById('tripTitle').textContent = '暂无行程';
+                document.getElementById('tripSubtitle').textContent = '请先在规划页面创建出行计划';
+                document.getElementById('tripStatus').style.display = 'none';
+                return;
+            }
+            
+            currentTripData = trip;
+            loadCompletionStatus();
+            loadCollapsedDayStatus();
+            
+            updateTripHeader();
+            
+            console.log('Trip itinerary:', trip.itinerary);
+            
+            const latestItinerary = await fetchLatestItinerary();
+            if (latestItinerary) {
+                trip.itinerary = latestItinerary;
+                updateTripRecordLocal(latestItinerary, false);
+            }
+
+            if (trip.itinerary) {
+                renderTimeline(trip.itinerary);
+            } else {
+                document.getElementById('timelineContainer').innerHTML = 
+                    '<p style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">行程规划生成中，请稍候...</p>';
+            }
+        }
+
+        window.scrollToLatestChecked = function() {
+            if (latestCheckedTarget) {
+                const offset = 80;
+                const top = latestCheckedTarget.getBoundingClientRect().top + window.scrollY - offset;
+                window.scrollTo({ top, behavior: 'smooth' });
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            ensureTimelineInteractionsInitialized();
+            await loadTripData();
+            setTripEditButtonStatus();
+        });
+
+        window.openCreateActivity = openCreateActivity;
+        window.openEditActivity = openEditActivity;
+        window.deleteActivity = deleteActivity;
+        window.deleteTripDay = deleteTripDay;
+        window.addTripDay = addTripDay;
+        window.submitTripEdit = submitTripEdit;
+        window.closeTripEditPopup = closeTripEditPopup;
+    </script>
+</body>
+</html>

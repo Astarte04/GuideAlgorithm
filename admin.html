@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据库管理台</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f5f7fb;
+            --card: #ffffff;
+            --text: #1f2d3d;
+            --muted: #6b7a8c;
+            --border: #dbe2ea;
+            --primary: #1677ff;
+            --danger: #e5484d;
+            --ok: #18a058;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            color: var(--text);
+            background: var(--bg);
+        }
+        .layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: 100vh;
+        }
+        .sidebar {
+            background: #0f172a;
+            color: #d8e2f0;
+            padding: 16px 12px;
+            overflow-y: auto;
+        }
+        .sidebar h1 {
+            font-size: 18px;
+            margin: 4px 8px 12px;
+            color: #fff;
+        }
+        .table-item {
+            width: 100%;
+            background: transparent;
+            color: inherit;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            text-align: left;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+        .table-item.active {
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .table-item small {
+            color: #9fb0c7;
+        }
+        .main {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            padding: 16px;
+            gap: 12px;
+            overflow: hidden;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+        }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .topbar h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        button {
+            border: 1px solid var(--border);
+            background: #fff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+        .btn-ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+        .data-area {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 12px;
+            min-height: 0;
+        }
+        .table-wrap {
+            overflow: auto;
+            max-height: 64vh;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 8px;
+            vertical-align: top;
+            max-width: 280px;
+        }
+        th {
+            position: sticky;
+            top: 0;
+            background: #f8fafc;
+            z-index: 1;
+            text-align: left;
+        }
+        tr.selected {
+            background: #ecf5ff;
+        }
+        .editor textarea {
+            width: 100%;
+            height: 420px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+        .schema-hint {
+            margin-top: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+            max-height: 180px;
+            overflow: auto;
+            background: #fafcff;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #4e5969;
+        }
+        .cell-main {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 260px;
+            display: inline-block;
+            vertical-align: bottom;
+        }
+        .cell-sub {
+            display: block;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #8a94a6;
+        }
+        .status {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 8px;
+            min-height: 20px;
+        }
+        .pager {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <h1>数据库管理台</h1>
+            <div id="tableList"></div>
+        </aside>
+        <main class="main">
+            <section class="card topbar">
+                <h2 id="tableTitle">请选择数据表</h2>
+                <div class="toolbar">
+                    <button id="refreshBtn">刷新</button>
+                    <button id="newRowBtn">新增行</button>
+                    <button class="btn-ok" id="saveBtn">保存修改</button>
+                    <button class="btn-danger" id="deleteBtn">删除该行</button>
+                </div>
+            </section>
+            <section class="data-area">
+                <div class="card">
+                    <div class="table-wrap">
+                        <table id="dataTable"></table>
+                    </div>
+                </div>
+                <div class="card editor">
+                    <div>当前记录 JSON</div>
+                    <textarea id="rowEditor" placeholder="选择左侧记录后可编辑"></textarea>
+                    <div class="schema-hint" id="schemaHint">字段中文注释会显示在这里</div>
+                    <div class="status" id="statusText"></div>
+                </div>
+            </section>
+            <section class="card pager">
+                <div id="pagerInfo">-</div>
+                <div class="toolbar">
+                    <button id="prevBtn">上一页</button>
+                    <button id="nextBtn">下一页</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        const searchParams = new URLSearchParams(location.search);
+        const accessKey = searchParams.get('k') || '';
+        const apiBase = `${location.origin}/api/admin`;
+        let tablesMeta = [];
+        let currentTable = '';
+        let currentPk = 'id';
+        let currentRows = [];
+        let currentColumns = [];
+        let currentDisplayColumns = [];
+        let selectedRow = null;
+        let pageLimit = 50;
+        let pageOffset = 0;
+        let pageTotal = 0;
+        let userCodeMap = new Map();
+        const tableLabels = {
+            activity_completion: '活动完成记录',
+            community_post_comments: '社区评论',
+            community_post_images: '社区图片',
+            community_post_likes: '社区点赞',
+            community_posts: '社区帖子',
+            travel_plans: '行程计划',
+            trips: '用户行程',
+            users: '用户信息'
+        };
+        const fieldLabels = {
+            common: {
+                id: '主键ID',
+                user_id: '用户ID',
+                user_code: '用户编码',
+                created_at: '创建时间',
+                updated_at: '更新时间'
+            },
+            activity_completion: {
+                user_code: '用户编码',
+                plan_id: '计划ID',
+                day_number: '第几天',
+                activity_index: '活动序号',
+                completed: '是否完成(0/1)',
+                activity_id: '活动唯一标识'
+            },
+            community_post_comments: {
+                post_id: '帖子ID',
+                user_code: '用户编码',
+                content: '评论内容'
+            },
+            community_post_images: {
+                post_id: '帖子ID',
+                image_url: '图片地址或Base64',
+                sort_order: '图片顺序'
+            },
+            community_post_likes: {
+                post_id: '帖子ID',
+                user_code: '用户编码'
+            },
+            community_posts: {
+                user_code: '发布者编码',
+                trip_id: '关联行程ID',
+                trip_title: '行程标题',
+                completed_nodes: '已完成节点(JSON)',
+                content: '分享正文'
+            },
+            travel_plans: {
+                start_city: '出发城市',
+                target_city: '目标城市',
+                days: '天数',
+                people: '人数',
+                budget: '预算',
+                mode: '出行方式',
+                preferences: '偏好标签',
+                itinerary: '行程详情(JSON)',
+                plan_generated: '是否生成行程(0/1)',
+                edited: '是否手动编辑(0/1)'
+            },
+            trips: {
+                trip_id: '业务行程ID',
+                user_id: '用户ID',
+                user_code: '用户编码',
+                title: '标题',
+                destination: '目的地',
+                days: '天数',
+                head_count: '人数',
+                budget: '预算',
+                travel_style: '旅行风格',
+                preferences: '偏好设置',
+                plan_json: '行程JSON'
+            },
+            users: {
+                user_code: '用户编码',
+                username: '用户名',
+                password_hash: '密码哈希',
+                nickname: '昵称',
+                avatar_url: '头像地址或Base64'
+            }
+        };
+
+        function tableLabel(tableName) {
+            return tableLabels[tableName] || tableName;
+        }
+
+        function fieldLabel(tableName, fieldName) {
+            return fieldLabels?.[tableName]?.[fieldName] || fieldLabels.common[fieldName] || '暂无注释';
+        }
+
+        function isUserRelatedTable(columns) {
+            if (currentTable === 'users') return true;
+            const names = new Set(columns.map(c => c.name));
+            return names.has('user_id') || names.has('user_code');
+        }
+
+        async function loadUserCodeMap() {
+            if (userCodeMap.size > 0) return;
+            let offset = 0;
+            const limit = 500;
+            while (true) {
+                const data = await request(`${apiBase}/table/users?limit=${limit}&offset=${offset}`);
+                const rows = data.rows || [];
+                rows.forEach(row => {
+                    if (row.id !== undefined && row.id !== null) {
+                        userCodeMap.set(String(row.id), row.user_code || '');
+                    }
+                });
+                if (rows.length < limit) break;
+                offset += limit;
+            }
+        }
+
+        function buildDisplayColumns(columns) {
+            const display = [...columns];
+            const names = new Set(columns.map(c => c.name));
+            const shouldAddVirtualUserCode = names.has('user_id') && !names.has('user_code');
+            if (shouldAddVirtualUserCode) {
+                display.unshift({
+                    name: 'user_code',
+                    virtual: true
+                });
+            }
+            return display;
+        }
+
+        function resolveCellValue(row, column) {
+            if (!column.virtual) {
+                return row[column.name];
+            }
+            if (column.name === 'user_code') {
+                if (row.user_code !== undefined && row.user_code !== null) {
+                    return row.user_code;
+                }
+                if (row.user_id !== undefined && row.user_id !== null) {
+                    return userCodeMap.get(String(row.user_id)) ?? null;
+                }
+            }
+            return null;
+        }
+
+        function maskLongText(text, fieldName) {
+            const value = String(text ?? '');
+            if (!value) return { main: '', sub: '' };
+            if (fieldName === 'password_hash') {
+                if (value.length <= 20) {
+                    return { main: value, sub: `长度 ${value.length}` };
+                }
+                return {
+                    main: `${value.slice(0, 8)}...${value.slice(-8)}`,
+                    sub: `密码哈希，长度 ${value.length}`
+                };
+            }
+            if (value.length <= 60) {
+                return { main: value, sub: '' };
+            }
+            return {
+                main: `${value.slice(0, 24)}...${value.slice(-12)}`,
+                sub: `已截断显示，长度 ${value.length}`
+            };
+        }
+
+        function renderCell(row, column) {
+            const raw = resolveCellValue(row, column);
+            if (raw === null || raw === undefined) {
+                return '';
+            }
+            const fieldName = column.name;
+            const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
+            const masked = maskLongText(text, fieldName);
+            const title = escapeHtml(text);
+            if (!masked.sub) {
+                return `<span class="cell-main" title="${title}">${escapeHtml(masked.main)}</span>`;
+            }
+            return `<span class="cell-main" title="${title}">${escapeHtml(masked.main)}</span><span class="cell-sub">${escapeHtml(masked.sub)}</span>`;
+        }
+
+        function escapeHtml(str) {
+            return String(str ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function setStatus(text, isError = false) {
+            const el = document.getElementById('statusText');
+            el.textContent = text || '';
+            el.style.color = isError ? '#e5484d' : '#6b7a8c';
+        }
+
+        async function request(url, options = {}) {
+            const fullUrl = `${url}${url.includes('?') ? '&' : '?'}k=${encodeURIComponent(accessKey)}`;
+            const response = await fetch(fullUrl, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options
+            });
+            const text = await response.text();
+            let data = {};
+            try { data = text ? JSON.parse(text) : {}; } catch { data = {}; }
+            if (!response.ok) {
+                throw new Error(data.detail || `请求失败: ${response.status}`);
+            }
+            return data;
+        }
+
+        function renderTableList() {
+            const container = document.getElementById('tableList');
+            container.innerHTML = tablesMeta.map(item => {
+                const active = item.table_name === currentTable ? 'active' : '';
+                return `
+                    <button class="table-item ${active}" data-table="${item.table_name}">
+                        <div>${tableLabel(item.table_name)}</div>
+                        <small>${item.table_name}</small><br>
+                        <small>${item.count} 行</small>
+                    </button>
+                `;
+            }).join('');
+            container.querySelectorAll('[data-table]').forEach(btn => {
+                btn.addEventListener('click', () => openTable(btn.dataset.table));
+            });
+        }
+
+        function renderRows(columns) {
+            const tableEl = document.getElementById('dataTable');
+            if (!columns.length) {
+                tableEl.innerHTML = '<tr><td>无数据</td></tr>';
+                document.getElementById('schemaHint').textContent = '当前表无字段';
+                return;
+            }
+            const head = `<tr>${currentDisplayColumns.map(c => {
+                const label = fieldLabel(currentTable, c.name);
+                return `<th title="${escapeHtml(label)}">${escapeHtml(label)}<br><span style="color:#86909c;">${escapeHtml(c.name)}</span></th>`;
+            }).join('')}</tr>`;
+            const body = currentRows.map((row, idx) => {
+                const selectedClass = selectedRow && String(selectedRow[currentPk]) === String(row[currentPk]) ? 'selected' : '';
+                return `<tr data-index="${idx}" class="${selectedClass}">
+                    ${currentDisplayColumns.map(c => `<td>${renderCell(row, c)}</td>`).join('')}
+                </tr>`;
+            }).join('');
+            tableEl.innerHTML = `<thead>${head}</thead><tbody>${body}</tbody>`;
+            tableEl.querySelectorAll('tbody tr').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    const idx = Number(tr.dataset.index);
+                    selectRow(currentRows[idx]);
+                });
+            });
+            renderSchemaHint();
+        }
+
+        function renderSchemaHint() {
+            const hint = document.getElementById('schemaHint');
+            const lines = currentDisplayColumns.map(c => `<div><b>${escapeHtml(c.name)}</b>：${escapeHtml(fieldLabel(currentTable, c.name))}</div>`);
+            hint.innerHTML = lines.join('') || '暂无字段注释';
+        }
+
+        function selectRow(row) {
+            selectedRow = row;
+            document.getElementById('rowEditor').value = JSON.stringify(row, null, 2);
+            renderTableList();
+            loadCurrentPage();
+        }
+
+        function updatePager() {
+            const from = pageOffset + 1;
+            const to = Math.min(pageOffset + pageLimit, pageTotal);
+            document.getElementById('pagerInfo').textContent = pageTotal ? `${from}-${to} / ${pageTotal}` : '0 / 0';
+        }
+
+        async function loadMeta() {
+            const data = await request(`${apiBase}/meta`);
+            tablesMeta = data.tables || [];
+            if (!currentTable && tablesMeta.length) {
+                currentTable = tablesMeta[0].table_name;
+            }
+            renderTableList();
+        }
+
+        async function loadCurrentPage() {
+            if (!currentTable) return;
+            const data = await request(`${apiBase}/table/${encodeURIComponent(currentTable)}?limit=${pageLimit}&offset=${pageOffset}`);
+            currentRows = data.rows || [];
+            currentColumns = data.columns || [];
+            if (isUserRelatedTable(currentColumns)) {
+                await loadUserCodeMap();
+            }
+            currentDisplayColumns = buildDisplayColumns(currentColumns);
+            pageTotal = data.total || 0;
+            currentPk = data.pk_column || 'id';
+            document.getElementById('tableTitle').textContent = `${tableLabel(currentTable)}（${currentTable}，主键：${currentPk}）`;
+            renderRows(currentColumns);
+            updatePager();
+        }
+
+        async function openTable(tableName) {
+            currentTable = tableName;
+            pageOffset = 0;
+            selectedRow = null;
+            document.getElementById('rowEditor').value = '';
+            await loadMeta();
+            await loadCurrentPage();
+        }
+
+        async function saveRow() {
+            if (!currentTable) return;
+            const editor = document.getElementById('rowEditor');
+            let parsed;
+            try {
+                parsed = JSON.parse(editor.value || '{}');
+            } catch {
+                setStatus('JSON 格式错误', true);
+                return;
+            }
+            if (selectedRow && selectedRow[currentPk] !== undefined && selectedRow[currentPk] !== null) {
+                await request(`${apiBase}/table/${encodeURIComponent(currentTable)}/${encodeURIComponent(selectedRow[currentPk])}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ data: parsed, pk: currentPk })
+                });
+                setStatus('修改成功');
+            } else {
+                await request(`${apiBase}/table/${encodeURIComponent(currentTable)}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ data: parsed, pk: currentPk })
+                });
+                setStatus('新增成功');
+            }
+            await loadMeta();
+            await loadCurrentPage();
+        }
+
+        async function deleteRow() {
+            if (!selectedRow || selectedRow[currentPk] === undefined || selectedRow[currentPk] === null) {
+                setStatus('请先选择要删除的记录', true);
+                return;
+            }
+            await request(`${apiBase}/table/${encodeURIComponent(currentTable)}/${encodeURIComponent(selectedRow[currentPk])}?pk=${encodeURIComponent(currentPk)}`, {
+                method: 'DELETE'
+            });
+            setStatus('删除成功');
+            selectedRow = null;
+            document.getElementById('rowEditor').value = '';
+            if (pageOffset >= pageTotal - 1 && pageOffset > 0) {
+                pageOffset = Math.max(0, pageOffset - pageLimit);
+            }
+            await loadMeta();
+            await loadCurrentPage();
+        }
+
+        function bindActions() {
+            document.getElementById('refreshBtn').addEventListener('click', async () => {
+                try {
+                    await loadMeta();
+                    await loadCurrentPage();
+                    setStatus('已刷新');
+                } catch (error) {
+                    setStatus(error.message, true);
+                }
+            });
+            document.getElementById('newRowBtn').addEventListener('click', () => {
+                selectedRow = null;
+                document.getElementById('rowEditor').value = '{}';
+                setStatus('请输入新记录 JSON 后点击保存');
+            });
+            document.getElementById('saveBtn').addEventListener('click', async () => {
+                try {
+                    await saveRow();
+                } catch (error) {
+                    setStatus(error.message, true);
+                }
+            });
+            document.getElementById('deleteBtn').addEventListener('click', async () => {
+                try {
+                    await deleteRow();
+                } catch (error) {
+                    setStatus(error.message, true);
+                }
+            });
+            document.getElementById('prevBtn').addEventListener('click', async () => {
+                if (pageOffset <= 0) return;
+                pageOffset = Math.max(0, pageOffset - pageLimit);
+                await loadCurrentPage();
+            });
+            document.getElementById('nextBtn').addEventListener('click', async () => {
+                if (pageOffset + pageLimit >= pageTotal) return;
+                pageOffset += pageLimit;
+                await loadCurrentPage();
+            });
+        }
+
+        async function init() {
+            if (!accessKey) {
+                setStatus('缺少访问密钥参数 k', true);
+                return;
+            }
+            bindActions();
+            try {
+                await loadMeta();
+                await loadCurrentPage();
+                setStatus('已连接数据库');
+            } catch (error) {
+                setStatus(error.message, true);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

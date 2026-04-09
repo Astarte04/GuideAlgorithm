@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>发布管理 - 云途智游</title>
+    <link rel="stylesheet" href="css/style.css?v=20260320">
+</head>
+<body>
+    <main class="container publish-manage-page">
+        <h2 class="page-title">发布管理</h2>
+        <div class="publish-manage-tip">可删除你自己发布的行程分享</div>
+        <div class="publish-manage-list" id="publishManageList"></div>
+        <div class="publish-manage-empty" id="publishManageEmpty" style="display:none;">暂无你发布的动态</div>
+    </main>
+
+    <script src="js/components/Navbar.js?v=20260320"></script>
+    <script src="js/common.js?v=20260320"></script>
+    <script>
+        const DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2280%22 height=%2280%22 viewBox=%220 0 24 24%22 fill=%22%23007aff%22%3E%3Cpath d=%22M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5z%22/%3E%3C/svg%3E';
+
+        function getCurrentUser() {
+            const raw = localStorage.getItem('appUser');
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function escapeHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatDateText(value) {
+            if (!value) return '';
+            const date = new Date(value.replace(' ', 'T'));
+            if (Number.isNaN(date.getTime())) return value;
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            return `${month}-${day} ${hour}:${minute}`;
+        }
+
+        function renderMyPost(post) {
+            const imagesHtml = (post.images || []).map((url, idx) => `
+                <img src="${url}" alt="动态图片${idx + 1}" class="community-post-image">
+            `).join('');
+            const completedText = (post.completed_nodes || []).slice(0, 4).join(' · ');
+            return `
+                <article class="community-post-card publish-manage-card" data-post-id="${post.id}">
+                    <div class="community-post-head">
+                        <img class="community-post-avatar" src="${post.user.avatar_url || DEFAULT_AVATAR}" alt="头像">
+                        <div class="community-post-user">
+                            <div class="community-post-name">${escapeHtml(post.user.nickname || post.user.username || '')}</div>
+                            <div class="community-post-id">ID: ${escapeHtml(post.user.user_code || '')}</div>
+                        </div>
+                    </div>
+                    <div class="community-post-meta">
+                        <span>${escapeHtml(post.trip_title || '')}</span>
+                        <span>${escapeHtml(completedText)}</span>
+                    </div>
+                    ${post.content ? `<div class="community-post-content">${escapeHtml(post.content)}</div>` : ''}
+                    ${imagesHtml ? `<div class="community-post-images">${imagesHtml}</div>` : ''}
+                    <div class="publish-manage-footer">
+                        <span class="community-post-time">${formatDateText(post.created_at)}</span>
+                        <button class="publish-manage-delete" data-delete-post="true" type="button">删除</button>
+                    </div>
+                </article>
+            `;
+        }
+
+        function renderList(posts) {
+            const list = document.getElementById('publishManageList');
+            const empty = document.getElementById('publishManageEmpty');
+            if (!posts.length) {
+                list.innerHTML = '';
+                empty.style.display = 'block';
+                return;
+            }
+            empty.style.display = 'none';
+            list.innerHTML = posts.map(item => renderMyPost(item)).join('');
+        }
+
+        async function loadMyPosts() {
+            const user = getCurrentUser();
+            if (!user) {
+                document.getElementById('publishManageList').innerHTML = '';
+                document.getElementById('publishManageEmpty').style.display = 'block';
+                document.getElementById('publishManageEmpty').textContent = '请先登录后查看发布管理';
+                return;
+            }
+            const response = await fetch(`${API_BASE_URL}/community/posts/mine?user_code=${encodeURIComponent(user.user_code)}`);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.detail || '加载失败');
+            }
+            renderList(data.posts || []);
+        }
+
+        async function handleDelete(postId) {
+            const user = getCurrentUser();
+            if (!user) {
+                await showAlertDialog('请先登录后再删除');
+                return;
+            }
+            const confirmed = await showConfirmDialog('确定删除这条动态吗？');
+            if (!confirmed) return;
+            const response = await fetch(`${API_BASE_URL}/community/posts/${postId}?user_code=${encodeURIComponent(user.user_code)}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                await showAlertDialog(data.detail || '删除失败');
+                return;
+            }
+            await loadMyPosts();
+            await showAlertDialog('删除成功');
+        }
+
+        function bindActions() {
+            const list = document.getElementById('publishManageList');
+            list.addEventListener('click', async (event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement)) return;
+                const deleteBtn = target.closest('[data-delete-post]');
+                if (!(deleteBtn instanceof HTMLElement)) return;
+                const card = deleteBtn.closest('[data-post-id]');
+                if (!(card instanceof HTMLElement)) return;
+                const postId = Number(card.getAttribute('data-post-id'));
+                if (!postId) return;
+                await handleDelete(postId);
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            bindActions();
+            try {
+                await loadMyPosts();
+            } catch (error) {
+                await showAlertDialog(error.message || '发布管理加载失败');
+            }
+        });
+    </script>
+</body>
+</html>

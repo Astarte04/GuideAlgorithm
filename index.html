@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>云途</title>
+    <link rel="stylesheet" href="css/style.css?v=20260319">
+</head>
+<body>
+    <!-- 浮窗遮罩 -->
+    <div class="popup-mask" id="popupMask" onclick="closeFormPopup()"></div>
+    <!-- 导航栏由 Navbar.js 动态注入 -->
+
+    <!-- 主内容 -->
+    <main class="main-page" id="mainPage">
+        <div class="container">
+            <div class="plan-header">
+                <h2 class="page-title">我的出行计划</h2>
+                <div class="bulk-toolbar" id="bulkToolbar">
+                    <button class="bulk-toolbar__btn" id="toggleBulkBtn" onclick="toggleBulkMode()">批量管理</button>
+                    <div class="bulk-toolbar__actions" id="bulkActions" style="display: none;">
+                        <span class="bulk-toolbar__count" id="bulkSelectedCount">已选 0 项</span>
+                        <button class="bulk-toolbar__btn bulk-toolbar__btn--ghost" id="bulkSelectAllBtn" onclick="toggleSelectAllRecords()">全选</button>
+                        <button class="bulk-toolbar__btn bulk-toolbar__btn--danger" id="bulkDeleteBtn" onclick="deleteSelectedRecords()" disabled>删除选中</button>
+                    </div>
+                </div>
+            </div>
+            <div id="travelInfo" class="travel-info"></div>
+        </div>
+    </main>
+    <!-- 定位悬浮按钮 -->
+    <button class="locate-btn" id="locateFocusBtn" onclick="scrollToFocused()" aria-label="定位到聚焦行程" title="定位到聚焦行程" style="display: none;">
+        <svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+    </button>
+    <!-- 加号悬浮按钮 -->
+    <button class="add-btn" id="addBtn" onclick="openFormPopup()" aria-label="添加出行计划">+</button>
+    <!-- 表单浮窗 -->
+    <div class="form-popup" id="formPopup" role="dialog" aria-labelledby="formTitle" aria-modal="true">
+        <button class="popup-close" onclick="closeFormPopup()" aria-label="关闭表单">×</button>
+        <h2 class="page-title" id="formTitle">出行信息填写</h2>
+        
+        <!-- 切换选项卡 -->
+        <div class="input-mode-tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; position: relative;">
+            <button class="tab-btn active" id="tabForm" onclick="switchInputMode('form')" style="flex: 1; padding: 8px; border: none; background: none; color: var(--primary); font-weight: bold; cursor: pointer; font-size: 15px;">表单填写</button>
+            <button class="tab-btn" id="tabNatural" onclick="switchInputMode('natural')" style="flex: 1; padding: 8px; border: none; background: none; color: var(--text-secondary); font-weight: normal; cursor: pointer; font-size: 15px;">自然语言输入</button>
+        </div>
+
+        <!-- 表单填写区 -->
+        <div id="formInputArea">
+            <div class="form-row">
+                <div class="form-item">
+                    <label class="form-label required">起始点</label>
+                    <div class="autocomplete-container" id="startAutocomplete">
+                        <input type="text" class="autocomplete-input" id="startPoint" placeholder="出发城市" autocomplete="off">
+                        <ul class="autocomplete-list" id="startPointList"></ul>
+                    </div>
+                </div>
+                <div class="form-item">
+                    <label class="form-label required">目的地</label>
+                    <div class="autocomplete-container" id="endAutocomplete">
+                        <input type="text" class="autocomplete-input" id="endPoint" placeholder="目的城市" autocomplete="off">
+                        <ul class="autocomplete-list" id="endPointList"></ul>
+                    </div>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-item">
+                    <label class="form-label required">出行天数</label>
+                    <input type="number" class="input-field" id="travelDays" placeholder="天数" min="1">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">出行人数</label>
+                    <input type="number" class="input-field" id="peopleNum" placeholder="人数" min="1">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-item">
+                    <label class="form-label">预算（元）</label>
+                    <input type="number" class="input-field" id="budget" placeholder="预算">
+                </div>
+                <div class="form-item">
+                    <label class="form-label">出游模式</label>
+                    <div class="autocomplete-container" id="modeAutocomplete">
+                        <input type="text" class="autocomplete-input" id="travelMode" placeholder="请选择出游模式" autocomplete="off" readonly>
+                        <ul class="autocomplete-list" id="travelModeList">
+                            <li class="autocomplete-item" data-value="个人">个人</li>
+                            <li class="autocomplete-item" data-value="家庭">家庭</li>
+                            <li class="autocomplete-item" data-value="企业">企业</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="form-item">
+                <label class="form-label">出行偏好（可多选）</label>
+                <div class="option-group multi-select" id="travelPrefer">
+                    <div class="option" onclick="toggleMultiSelect(this)">自然风光</div>
+                    <div class="option" onclick="toggleMultiSelect(this)">人文古迹</div>
+                    <div class="option" onclick="toggleMultiSelect(this)">都市休闲</div>
+                    <div class="option" onclick="toggleMultiSelect(this)">美食探店</div>
+                    <div class="option" onclick="toggleMultiSelect(this)">亲子乐园</div>
+                    <div class="option" onclick="toggleMultiSelect(this)">户外探险</div>
+                </div>
+                <input type="text" class="input-field" id="travelPreferInput" placeholder="请输入其他出行偏好">
+            </div>
+        </div>
+
+        <!-- 自然语言输入区 -->
+        <div id="naturalInputArea" style="display: none;">
+            <div class="form-item">
+                <label class="form-label required">请描述您的出行计划</label>
+                <textarea class="input-field" id="naturalInputText" placeholder="例如：我想从北京去成都玩5天，2个人，预算5000元，喜欢看自然风光吃美食。" style="height: 150px; resize: vertical; padding: 10px; line-height: 1.5;"></textarea>
+                <p style="font-size: 12px; color: #888; margin-top: 8px;">系统会自动识别您的出发地、目的地、天数等信息，未提及的信息将由 AI 为您合理补充。</p>
+            </div>
+        </div>
+
+        <button class="btn-submit" onclick="submitTravelForm()">
+            <svg viewBox="0 0 24 24"><path d="M22 12l-4-5v3h-4v4h4v3l4-5z"/><path d="M2 12h8v-2H2v2zm0 4h8v-2H2v2zm0-8h8V8H2v2z"/></svg>
+            提交出行信息
+        </button>
+    </div>
+    <script src="js/components/Navbar.js?v=20260319"></script>
+    <script src="js/common.js?v=20260319"></script>
+</body>
+</html>

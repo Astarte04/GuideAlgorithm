@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>系统设置 - 云途智游</title>
+    <link rel="stylesheet" href="css/style.css?v=20260319">
+    <style>
+        body {
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+    </style>
+</head>
+<body class="settings-page">
+    <div class="settings-wrap">
+        <div class="settings-header">
+            <button class="settings-back" id="settingsBackBtn" type="button">返回</button>
+            <h1 class="settings-title">系统设置</h1>
+        </div>
+
+        <section class="settings-card">
+            <h2 class="settings-card-title">用户信息设置</h2>
+            <div class="profile-row">
+                <img id="profileAvatar" class="profile-avatar-large" alt="头像" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2278%22 height=%2278%22 viewBox=%220 0 24 24%22 fill=%22%23007aff%22%3E%3Cpath d=%22M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5z%22/%3E%3C/svg%3E">
+                <label class="profile-upload">
+                    上传头像
+                    <input type="file" id="avatarInput" accept="image/*">
+                </label>
+            </div>
+            <input class="profile-input" id="nicknameInput" placeholder="请输入昵称" maxlength="20">
+            <div class="profile-id" id="userIdText">ID: --</div>
+            <button class="auth-submit" id="saveProfileBtn" type="button" style="margin-top:12px;">保存资料</button>
+        </section>
+
+        <section class="settings-card">
+            <h2 class="settings-card-title">帮助中心</h2>
+            <ul class="settings-list">
+                <li class="settings-list-item">如遇到行程生成或编辑问题，请先检查网络连接并刷新页面。</li>
+            </ul>
+        </section>
+
+        <section class="settings-card">
+            <h2 class="settings-card-title">隐私条款</h2>
+            <ul class="settings-list">
+                <li class="settings-list-item">账号信息仅用于登录和基础个性化展示，不会用于其他用途。</li>
+            </ul>
+        </section>
+
+        <section class="settings-card">
+            <h2 class="settings-card-title">关于软件</h2>
+            <ul class="settings-list">
+                <li class="settings-list-item">云途智游用于提供智能行程规划与管理服务。</li>
+            </ul>
+        </section>
+
+        <section class="settings-card">
+            <h2 class="settings-card-title">使用反馈</h2>
+            <ul class="settings-list">
+                <li class="settings-list-item">反馈邮箱：feedback@yuntu.local</li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="js/common.js?v=20260319"></script>
+    <script>
+        const DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2278%22 height=%2278%22 viewBox=%220 0 24 24%22 fill=%22%23007aff%22%3E%3Cpath d=%22M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.34 0-10 1.67-10 5v3h20v-3c0-3.33-6.66-5-10-5z%22/%3E%3C/svg%3E';
+        const MAX_AVATAR_UPLOAD_BYTES = 5 * 1024 * 1024;
+        const MAX_AVATAR_STORE_BYTES = 2 * 1024 * 1024;
+        let pendingAvatarUrl = '';
+        let currentUser = null;
+
+        function estimateDataUrlBytes(dataUrl) {
+            if (!dataUrl || typeof dataUrl !== 'string') return 0;
+            const commaIndex = dataUrl.indexOf(',');
+            if (commaIndex < 0) return 0;
+            const base64 = dataUrl.slice(commaIndex + 1);
+            const padding = (base64.match(/=+$/) || [''])[0].length;
+            return Math.floor(base64.length * 0.75) - padding;
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result || '');
+                reader.onerror = () => reject(new Error('头像读取失败'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function loadImageElement(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('头像解析失败'));
+                img.src = dataUrl;
+            });
+        }
+
+        async function normalizeAvatarDataUrl(file) {
+            if (!file.type || !file.type.startsWith('image/')) {
+                throw new Error('请选择图片文件');
+            }
+            if (file.size > MAX_AVATAR_UPLOAD_BYTES) {
+                throw new Error('头像原图不能超过5MB');
+            }
+            const sourceDataUrl = await readFileAsDataURL(file);
+            const image = await loadImageElement(sourceDataUrl);
+            const maxSide = 420;
+            const width = image.width || 1;
+            const height = image.height || 1;
+            const scale = Math.min(1, maxSide / Math.max(width, height));
+            const targetWidth = Math.max(1, Math.round(width * scale));
+            const targetHeight = Math.max(1, Math.round(height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+            const mimeCandidates = ['image/webp', 'image/jpeg', 'image/png'];
+            let result = '';
+            for (const mime of mimeCandidates) {
+                const qualityList = mime === 'image/png' ? [undefined] : [0.9, 0.82, 0.75];
+                for (const quality of qualityList) {
+                    result = quality === undefined ? canvas.toDataURL(mime) : canvas.toDataURL(mime, quality);
+                    if (estimateDataUrlBytes(result) <= MAX_AVATAR_STORE_BYTES) {
+                        return result;
+                    }
+                }
+            }
+            if (estimateDataUrlBytes(result) > MAX_AVATAR_STORE_BYTES) {
+                throw new Error('头像处理后仍超过2MB，请换一张更小的图片');
+            }
+            return result;
+        }
+
+        function getStoredUser() {
+            const raw = localStorage.getItem('appUser');
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setStoredUser(user) {
+            localStorage.setItem('appUser', JSON.stringify(user));
+        }
+
+        function bindBackAction() {
+            const btn = document.getElementById('settingsBackBtn');
+            btn.addEventListener('click', () => {
+                document.body.classList.add('page-transition-out');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 180);
+            });
+        }
+
+        async function loadUserProfile() {
+            const stored = getStoredUser();
+            if (!stored || !stored.user_code) {
+                await showAlertDialog('请先在侧边栏登录后再进入系统设置');
+                window.location.href = '/';
+                return;
+            }
+            const response = await fetch(`${API_BASE_URL}/user/${stored.user_code}`);
+            const data = await response.json();
+            if (!response.ok) {
+                await showAlertDialog(data.detail || '用户信息加载失败');
+                window.location.href = '/';
+                return;
+            }
+            currentUser = data.user;
+            pendingAvatarUrl = currentUser.avatar_url || '';
+            document.getElementById('nicknameInput').value = currentUser.nickname || '';
+            document.getElementById('profileAvatar').src = currentUser.avatar_url || DEFAULT_AVATAR;
+            document.getElementById('userIdText').textContent = `ID: ${currentUser.user_code}`;
+        }
+
+        function bindAvatarUploader() {
+            const input = document.getElementById('avatarInput');
+            input.addEventListener('change', async () => {
+                const file = input.files && input.files[0];
+                if (!file) return;
+                try {
+                    pendingAvatarUrl = await normalizeAvatarDataUrl(file);
+                    document.getElementById('profileAvatar').src = pendingAvatarUrl || DEFAULT_AVATAR;
+                } catch (error) {
+                    await showAlertDialog(error.message || '头像处理失败');
+                    input.value = '';
+                    return;
+                }
+                input.value = '';
+            });
+        }
+
+        function bindSaveProfile() {
+            const btn = document.getElementById('saveProfileBtn');
+            btn.addEventListener('click', async () => {
+                if (!currentUser) return;
+                const nickname = document.getElementById('nicknameInput').value.trim();
+                if (!nickname) {
+                    await showAlertDialog('昵称不能为空');
+                    return;
+                }
+                const response = await fetch(`${API_BASE_URL}/user/${currentUser.user_code}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        nickname,
+                        avatar_url: pendingAvatarUrl || null
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    await showAlertDialog(data.detail || '保存失败');
+                    return;
+                }
+                currentUser = data.user;
+                pendingAvatarUrl = currentUser.avatar_url || '';
+                setStoredUser(currentUser);
+                document.getElementById('profileAvatar').src = currentUser.avatar_url || DEFAULT_AVATAR;
+                document.getElementById('userIdText').textContent = `ID: ${currentUser.user_code}`;
+                await showAlertDialog('保存成功');
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            bindBackAction();
+            bindAvatarUploader();
+            bindSaveProfile();
+            await loadUserProfile();
+        });
+    </script>
+</body>
+</html>
