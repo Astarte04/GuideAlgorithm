@@ -6,7 +6,7 @@ from typing import Optional
 from .prompt import generate_travel_prompt
 from .model import save_travel_plan, update_travel_plan_itinerary, get_travel_plan
 
-DEEPSEEK_API_KEY = "sk-a615801a914e4c58834523e34638e6c5"
+DEEPSEEK_API_KEY = ""
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 async def call_deepseek_api(prompt: str) -> dict:
